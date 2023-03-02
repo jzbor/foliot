@@ -10,4 +10,5 @@ chrono = { version = "0.4.23", features = ["serde"] }
 clap = { version = "4.1.8", features = ["derive"] }
 serde = { version = "1.0.151", features = ["derive"] }
 serde_yaml = { version = "0.9.16" }
+tabled = { version = "0.10.0", features = ["color"] }
 xdg = "2.4.1"

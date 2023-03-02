@@ -1,10 +1,13 @@
 use chrono::offset::Local;
-use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveTime};
+use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveDate, NaiveTime};
 use clap::Parser;
 use serde::{Serialize, Deserialize};
 use std::fmt::Display;
 use std::fs;
 use std::path::*;
+use tabled::*;
+use tabled::color::Color;
+use tabled::object::*;
 
 /// Tracks time for tasks
 #[derive(Parser)]
@@ -53,6 +56,8 @@ enum Command {
         #[clap(short, long)]
         comment: Option<String>,
     },
+
+    Show,
 }
 
 /// Human readable duration (no more precise than a minute)
@@ -78,6 +83,17 @@ struct Entry {
     comment: Option<String>,
 }
 
+/// Entry formatted for displaying in human-readable form
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Tabled)]
+struct TableEntry {
+    date: NaiveDate,
+    from: NaiveTime,
+    to: NaiveTime,
+    duration: Duration,
+    comment: String,
+}
+
+
 
 const DEFAULT_NAMESPACE: &str = "default";
 const XDG_DIR_PREFIX: &str = "pendulum";
@@ -91,6 +107,7 @@ impl Command {
             Self::Clockin => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
+            Self::Show => show(args),
         }
     }
 }
@@ -138,6 +155,31 @@ impl Into<Duration> for chrono::Duration {
         }
     }
 }
+
+impl Into<TableEntry> for Entry {
+    fn into(self) -> TableEntry {
+        TableEntry {
+            date: self.start_time.date_naive(),
+            from: self.start_time.time(),
+            to: self.end_time.time(),
+            duration: self.duration,
+            comment: self.comment.unwrap_or(String::new()),
+        }
+    }
+}
+
+impl Into<TableEntry> for &Entry {
+    fn into(self) -> TableEntry {
+        TableEntry {
+            date: self.start_time.date_naive(),
+            from: self.start_time.time(),
+            to: self.end_time.time(),
+            duration: self.duration,
+            comment: self.comment.clone().unwrap_or(String::new()),
+        }
+    }
+}
+
 
 
 /// Abort the currently running clock by deleting its file
@@ -219,6 +261,7 @@ fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
     remove_data_file(&clockin_path)
 }
 
+/// Check if the timespan of two entries overlap
 fn entries_overlap(e1: &Entry, e2: &Entry) -> bool {
     (e1.start_time > e2.start_time && e1.start_time < e2.end_time)
         || (e1.end_time > e2.start_time && e1.end_time < e2.end_time)
@@ -286,6 +329,28 @@ fn remove_data_file(path: &impl AsRef<Path>) -> Result<(), String> {
         .ok_or(format!("Path not found"))?;
     fs::remove_file(abs_path)
         .map_err(|e| e.to_string())
+}
+
+/// Print human readable table to the terminal
+fn show(args: &Args) -> Result<(), String> {
+    let path = Entry::relative_path(&args.namespace);
+    let entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
+        read_data_file(&path)?
+    } else {
+        return Err(format!("No file found for namespace '{}'", args.namespace));
+    };
+
+    let table_entries: Vec<TableEntry> = entries.iter().map(|e| e.into()).collect();
+
+    let table = Table::new(table_entries)
+        .with(Style::rounded())
+        .with(Rows::new(1..).not(Columns::first()).modify().with(Alignment::center()))
+        .with(Color::FG_GREEN)
+        .with(Margin::new(1, 1, 1, 1))
+        .to_string();
+    println!("{}", table);
+
+    Ok(())
 }
 
 /// Serialize a file with the relative path `path` in the data directory
