@@ -55,7 +55,11 @@ enum Command {
         comment: Option<String>,
     },
 
-    Show,
+    Show {
+        /// Only show last n entries (0 to show all)
+        #[clap(short, long, default_value_t = 30)]
+        tail: usize,
+    },
 }
 
 /// Human readable duration (no more precise than a minute)
@@ -105,7 +109,7 @@ impl Command {
             Self::Clockin => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
-            Self::Show => show(args),
+            Self::Show { tail } => show(*tail, args),
         }
     }
 }
@@ -334,7 +338,7 @@ fn remove_data_file(path: &impl AsRef<Path>) -> Result<(), String> {
 }
 
 /// Print human readable table to the terminal
-fn show(args: &Args) -> Result<(), String> {
+fn show(tail: usize, args: &Args) -> Result<(), String> {
     let path = Entry::relative_path(&args.namespace);
     let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
         read_data_file(&path)?
@@ -343,9 +347,19 @@ fn show(args: &Args) -> Result<(), String> {
     };
     entries.sort();
 
-    let table_entries: Vec<TableEntry> = entries.iter().map(|e| e.into()).collect();
+    let table_entries: Vec<TableEntry> = entries.iter()
+        .map(|e| e.into())
+        .collect();
 
-    let table = Table::new(table_entries)
+    let entry_slice = if tail == 0 {
+        table_entries.as_slice()
+    } else {
+        let len = table_entries.len();
+        let idx = if len > tail { len - tail } else { 0 };
+        &table_entries.as_slice()[idx..]
+    };
+
+    let table = Table::new(entry_slice)
         .with(Style::rounded())
         .with(Rows::new(1..).not(Columns::first()).modify().with(Alignment::center()))
         .with(Color::FG_GREEN)
