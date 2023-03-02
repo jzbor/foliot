@@ -1,5 +1,5 @@
 use chrono::offset::Local;
-use chrono::{DateTime, DurationRound};
+use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveTime};
 use clap::Parser;
 use serde::{Serialize, Deserialize};
 use std::fmt::Display;
@@ -29,6 +29,20 @@ struct ClockinTimestamp {
 enum Command {
     /// Abort current timer
     Abort,
+
+    /// Clock an arbitrary time
+    Clock {
+        /// Number of minutes to log
+        minutes: i64,
+
+        /// Starting time (format: %Y-%m-%dT%H:%M:%S, eg. 2015-09-18T23:56:04)
+        #[clap(short, long, value_parser = parse_starting_value)]
+        starting: Option<NaiveDateTime>,
+
+        /// Comment on the clock entry
+        #[clap(short, long)]
+        comment: Option<String>,
+    },
 
     /// Start the timer
     Clockin,
@@ -76,6 +90,7 @@ impl Command {
             Self::Abort => abort(args),
             Self::Clockin => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
+            Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
         }
     }
 }
@@ -137,6 +152,45 @@ fn abort(args: &Args) -> Result<(), String> {
     }
 }
 
+fn clock(start: DateTime<Local>, end: DateTime<Local>, comment: Option<String>, args: &Args) -> Result<(), String> {
+    let path = Entry::relative_path(&args.namespace);
+    let mut entries = if data_file_exists(&path).unwrap() {
+        read_data_file(&path)?
+    } else {
+        Vec::new()
+    };
+
+    let entry = Entry::create(start, end, comment);
+
+    println!("Adding entry for namespace '{}':", args.namespace);
+    println!("\t starting at {}", entry.start_time);
+    println!("\t ending at   {}", entry.end_time);
+    println!("\t duration:   {}", entry.duration);
+    if let Some(comment) = &entry.comment {
+        println!("\t comment:    {}", comment);
+    }
+
+    entries.push(entry);
+    write_data_file(&path, entries)
+}
+
+fn clock_duration(minutes: i64, starting: Option<NaiveDateTime>, comment: Option<String>, args: &Args)
+        -> Result<(), String> {
+    let duration = chrono::Duration::minutes(minutes);
+
+    let (start, end) = if let Some(starting) = starting {
+        let start = Local.from_local_datetime(&starting).unwrap();
+        let end = start + duration;
+        (start, end)
+    } else {
+        let end = now();
+        let start = end - duration;
+        (start, end)
+    };
+
+    clock(start, end, comment, args)
+}
+
 /// Start a new clock by creating a new clockin file
 fn clockin(args: &Args) -> Result<(), String> {
     let path = ClockinTimestamp::relative_path(&args.namespace);
@@ -152,29 +206,11 @@ fn clockin(args: &Args) -> Result<(), String> {
 
 /// Stop the clock and entry to the entries file
 fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
-    let path = Entry::relative_path(&args.namespace);
-    let mut entries = if data_file_exists(&path).unwrap() {
-        read_data_file(&path)?
-    } else {
-        Vec::new()
-    };
-
     let clockin_path = ClockinTimestamp::relative_path(&args.namespace);
     let clockin_timestamp: ClockinTimestamp = read_data_file(&clockin_path)
         .map_err(|_| "No clockin file found".to_owned())?;
 
-    let entry = Entry::create(clockin_timestamp.start_time, now(), comment);
-
-    println!("Adding entry for namespace '{}':", args.namespace);
-    println!("\t starting at {}", entry.start_time);
-    println!("\t ending at   {}", entry.end_time);
-    println!("\t duration:   {}", entry.duration);
-    if let Some(comment) = &entry.comment {
-        println!("\t comment:    {}", comment);
-    }
-
-    entries.push(entry);
-    write_data_file(&path, entries)?;
+    clock(clockin_timestamp.start_time, now(), comment, args)?;
     remove_data_file(&clockin_path)
 }
 
@@ -188,6 +224,34 @@ fn data_file_exists(path: &impl AsRef<Path>) -> Result<bool, String> {
 /// Return current time in the current timezone
 fn now() -> DateTime<Local> {
     Local::now().duration_round(chrono::Duration::minutes(1)).unwrap()
+}
+
+/// Parse a starting value
+fn parse_starting_value(s: &str) -> Result<NaiveDateTime, String> {
+    NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S")
+        .or(NaiveDateTime::parse_from_str(s, "%d.%m.%Y-%H:%M"))
+        .or(NaiveDateTime::parse_from_str(s, "%d.%m.%Y %H:%M"))
+        .or(parse_starting_value_time(s))
+        .map_err(|_| format!("unable to parse datetime '{}'", s))
+}
+
+/// Parse a starting datetime based on the time alone (either today or yesterday)
+fn parse_starting_value_time(s: &str) -> Result<NaiveDateTime, String> {
+    let time = NaiveTime::parse_from_str(s, "%H:%M")
+        .or(NaiveTime::parse_from_str(s, "%H:%Mh"))
+        .or(NaiveTime::parse_from_str(s, "%H%M"))
+        .or(NaiveTime::parse_from_str(s, "%H%Mh"))
+        .map_err(|_| format!("unable to parse time '{}'", s))?;
+
+    let current_datetime = now();
+    let date = if current_datetime.time() > time {
+        current_datetime.date_naive()
+    } else {
+        current_datetime.date_naive()
+            .checked_sub_days(chrono::Days::new(1)).unwrap()
+    };
+
+    Ok(NaiveDateTime::new(date, time))
 }
 
 /// Deserialize a file with the relative path `path` in the data directory
@@ -223,7 +287,6 @@ fn write_data_file(path: &impl AsRef<Path>, data: impl Serialize) -> Result<(), 
     fs::write(abs_path, content)
         .map_err(|e| e.to_string())
 }
-
 
 fn main() {
     let args = Args::parse();
