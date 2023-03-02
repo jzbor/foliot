@@ -162,6 +162,11 @@ fn clock(start: DateTime<Local>, end: DateTime<Local>, comment: Option<String>, 
 
     let entry = Entry::create(start, end, comment);
 
+    // check if any entry overlaps
+    if entries.iter().any(|e| entries_overlap(&entry, e)) {
+        return Err("New entry overlaps an existing one".to_owned());
+    }
+
     println!("Adding entry for namespace '{}':", args.namespace);
     println!("\t starting at {}", entry.start_time);
     println!("\t ending at   {}", entry.end_time);
@@ -212,6 +217,13 @@ fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
 
     clock(clockin_timestamp.start_time, now(), comment, args)?;
     remove_data_file(&clockin_path)
+}
+
+fn entries_overlap(e1: &Entry, e2: &Entry) -> bool {
+    (e1.start_time > e2.start_time && e1.start_time < e2.end_time)
+        || (e1.end_time > e2.start_time && e1.end_time < e2.end_time)
+        || (e2.start_time > e1.start_time && e2.start_time < e1.end_time)
+        || (e2.end_time > e1.start_time && e2.end_time < e1.end_time)
 }
 
 /// Check whether a file with the relative path `path` exists in the data directory
