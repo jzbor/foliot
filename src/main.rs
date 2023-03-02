@@ -200,6 +200,10 @@ fn clock(start: DateTime<Local>, end: DateTime<Local>, comment: Option<String>, 
         Vec::new()
     };
 
+    // Sort entries
+    // TODO: Implement Ord/PartialOrd to use only the starting time
+    entries.sort();
+
     let entry = Entry::create(start, end, comment);
 
     // check if any entry overlaps
@@ -332,11 +336,12 @@ fn remove_data_file(path: &impl AsRef<Path>) -> Result<(), String> {
 /// Print human readable table to the terminal
 fn show(args: &Args) -> Result<(), String> {
     let path = Entry::relative_path(&args.namespace);
-    let entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
+    let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
         read_data_file(&path)?
     } else {
         return Err(format!("No file found for namespace '{}'", args.namespace));
     };
+    entries.sort();
 
     let table_entries: Vec<TableEntry> = entries.iter().map(|e| e.into()).collect();
 
