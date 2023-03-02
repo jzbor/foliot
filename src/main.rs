@@ -43,7 +43,6 @@ enum Command {
         starting: Option<NaiveDateTime>,
 
         /// Comment on the clock entry
-        #[clap(short, long)]
         comment: Option<String>,
     },
 
@@ -53,7 +52,6 @@ enum Command {
     /// Stop the timer and add save the entry
     Clockout {
         /// Comment on the clock entry
-        #[clap(short, long)]
         comment: Option<String>,
     },
 
