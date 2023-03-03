@@ -1,9 +1,11 @@
 use chrono::offset::Local;
-use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveDate, NaiveTime};
+use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveDate, NaiveTime, Months};
 use clap::Parser;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
+use std::ops::Add;
 use std::path::*;
 use tabled::*;
 use tabled::color::Color;
@@ -55,7 +57,15 @@ enum Command {
         comment: Option<String>,
     },
 
+    /// Show entries in a table
     Show {
+        /// Only show last n entries (0 to show all)
+        #[clap(short, long, default_value_t = 30)]
+        tail: usize,
+    },
+
+    /// Create a per-month summary
+    Summarize {
         /// Only show last n entries (0 to show all)
         #[clap(short, long, default_value_t = 30)]
         tail: usize,
@@ -95,6 +105,22 @@ struct TableEntry {
     comment: String,
 }
 
+/// Entry formatted for displaying a summary for a month
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Tabled)]
+struct SummaryTableItem {
+    month: String,
+
+    #[tabled(rename = "total hours")]
+    total_hours: Duration,
+
+    #[tabled(rename = "hours / week")]
+    hours_per_week: String,
+
+    days: usize,
+
+    #[tabled(rename = "entries")]
+    nitems: usize,
+}
 
 
 const DEFAULT_NAMESPACE: &str = "default";
@@ -110,6 +136,7 @@ impl Command {
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Show { tail } => show(*tail, args),
+            Self::Summarize { tail } => summarize(*tail, args),
         }
     }
 }
@@ -124,6 +151,15 @@ impl ClockinTimestamp {
     fn relative_path(namespace: &str) -> PathBuf {
         PathBuf::from(format!("{}-clockin", namespace))
             .with_extension("yaml")
+    }
+}
+
+impl Duration {
+    fn zero() -> Duration {
+        Duration {
+            hours: 0,
+            minutes: 0,
+        }
     }
 }
 
@@ -149,23 +185,23 @@ impl Display for Duration {
     }
 }
 
+impl Add for Duration {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        let added_minutes = self.minutes + other.minutes;
+        Duration {
+            hours: self.hours + other.hours + added_minutes / 60,
+            minutes: added_minutes % 60,
+        }
+    }
+}
+
 impl Into<Duration> for chrono::Duration {
     fn into(self) -> Duration {
         Duration {
             hours: self.num_hours(),
             minutes: self.num_minutes() % 60
-        }
-    }
-}
-
-impl Into<TableEntry> for Entry {
-    fn into(self) -> TableEntry {
-        TableEntry {
-            date: self.start_time.date_naive(),
-            from: self.start_time.time(),
-            to: self.end_time.time(),
-            duration: self.duration,
-            comment: self.comment.unwrap_or(String::new()),
         }
     }
 }
@@ -182,6 +218,27 @@ impl Into<TableEntry> for &Entry {
     }
 }
 
+impl Into<SummaryTableItem> for (String, Vec<Entry>) {
+    fn into(self) -> SummaryTableItem {
+        let (month, entries) = self;
+        let mut dates: Vec<NaiveDate> = entries.iter().map(|e| e.start_time.date_naive()).collect();
+        dates.dedup();
+
+        let total_hours = entries.iter()
+            .fold(Duration::zero(), |d, e| d + e.duration);
+        let days = dates.len();
+        let weeks: f32 = (days_in_month(entries.first().unwrap().start_time.date_naive()) as f32) / 7.0;
+        let rem_minutes = if total_hours.minutes == 0 { 0.0 } else { 60.0 / total_hours.minutes as f32 };
+        let hours_per_week = ((total_hours.hours as f32) + rem_minutes) / weeks;
+
+        SummaryTableItem {
+            month,
+            total_hours, days,
+            hours_per_week: format!("{:.2}", hours_per_week),
+            nitems: entries.len(),
+        }
+    }
+}
 
 
 /// Abort the currently running clock by deleting its file
@@ -265,6 +322,11 @@ fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
 
     clock(clockin_timestamp.start_time, now(), comment, args)?;
     remove_data_file(&clockin_path)
+}
+
+fn days_in_month(date: NaiveDate) -> i64 {
+    let date_next_month = date.checked_add_months(Months::new(1)).unwrap();
+    date_next_month.signed_duration_since(date).num_days()
 }
 
 /// Check if the timespan of two entries overlap
@@ -366,6 +428,54 @@ fn show(tail: usize, args: &Args) -> Result<(), String> {
         .with(Margin::new(1, 1, 1, 1))
         .to_string();
     println!("{}", table);
+
+    Ok(())
+}
+
+fn summarize(tail: usize, args: &Args) -> Result<(), String> {
+    let path = Entry::relative_path(&args.namespace);
+    let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
+        read_data_file(&path)?
+    } else {
+        return Err(format!("No file found for namespace '{}'", args.namespace));
+    };
+    entries.sort();
+
+    let mut entries_by_month: HashMap<String, Vec<Entry>> = HashMap::new();
+
+    for entry in entries {
+        // for now adding the month number insures correct sorting
+        let month = entry.start_time.format("%Y/%m %B").to_string();
+
+        if let Some(month_vec) = entries_by_month.get_mut(&month) {
+            month_vec.push(entry);
+        } else {
+            let month_vec = vec![entry];
+            entries_by_month.insert(month, month_vec);
+        }
+    }
+
+    let mut table_items: Vec<SummaryTableItem> = entries_by_month.drain()
+        .map(|m| m.into())
+        .collect();
+    table_items.sort();
+
+    let items_slice = if tail == 0 {
+        table_items.as_slice()
+    } else {
+        let len = table_items.len();
+        let idx = if len > tail { len - tail } else { 0 };
+        &table_items.as_slice()[idx..]
+    };
+
+    let table = Table::new(items_slice)
+        .with(Style::rounded())
+        .with(Rows::new(1..).not(Columns::first()).modify().with(Alignment::center()))
+        .with(Color::FG_GREEN)
+        .with(Margin::new(1, 1, 1, 1))
+        .to_string();
+    println!("{}", table);
+
 
     Ok(())
 }
