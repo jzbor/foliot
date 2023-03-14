@@ -1,4 +1,4 @@
-# Pendulum
+# Foliot
 A simple time tracking tool to keep track of your working or studying time.
 
 You can create different namespaces for different purposes.
