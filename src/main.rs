@@ -124,7 +124,7 @@ struct SummaryTableItem {
 
 
 const DEFAULT_NAMESPACE: &str = "default";
-const XDG_DIR_PREFIX: &str = "pendulum";
+const XDG_DIR_PREFIX: &str = "foliot";
 
 
 impl Command {
