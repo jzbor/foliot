@@ -3,10 +3,12 @@ use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveDate, NaiveT
 use clap::Parser;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
+use std::env;
 use std::fmt::Display;
 use std::fs;
 use std::ops::Add;
 use std::path::*;
+use std::process;
 use tabled::*;
 use tabled::color::Color;
 use tabled::object::*;
@@ -55,6 +57,13 @@ enum Command {
     Clockout {
         /// Comment on the clock entry
         comment: Option<String>,
+    },
+
+    /// Edit entries or clockin file
+    Edit {
+        /// Edit clockin file
+        #[clap(short, long)]
+        clockin: bool,
     },
 
     /// Show entries in a table
@@ -138,6 +147,7 @@ impl Command {
             Self::Clockin => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
+            Self::Edit { clockin } => edit(*clockin, args),
             Self::Show { tail } => show(*tail, args),
             Self::Status => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
@@ -319,7 +329,7 @@ fn clockin(args: &Args) -> Result<(), String> {
 }
 
 /// Stop the clock and entry to the entries file
-fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
+fn clockout(comment: Option<String>, args: &Args) -> Result<(), String> {
     let clockin_path = ClockinTimestamp::relative_path(&args.namespace);
     let clockin_timestamp: ClockinTimestamp = read_data_file(&clockin_path)
         .map_err(|_| "No clockin file found".to_owned())?;
@@ -331,6 +341,37 @@ fn clockout(comment: Option<String>, args: &Args)  -> Result<(), String> {
 fn days_in_month(date: NaiveDate) -> i64 {
     let date_next_month = date.checked_add_months(Months::new(1)).unwrap();
     date_next_month.signed_duration_since(date).num_days()
+}
+
+fn edit(clockin: bool, args: &Args) -> Result<(), String> {
+    let find_env = |name: &str| env::vars().into_iter()
+        .find(|(k, _)| k == name)
+        .map(|(_, v)| v);
+
+    let editor = find_env("EDITOR")
+        .or(find_env("VISUAL"))
+        .unwrap_or("vi".to_owned());
+
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(XDG_DIR_PREFIX)
+        .map_err(|e| e.to_string())?;
+    let path = if clockin {
+        let rel_path = ClockinTimestamp::relative_path(&args.namespace);
+        xdg_dirs.find_data_file(rel_path)
+            .ok_or(format!("No clockin file found for namespace {}", args.namespace))?
+    } else {
+        let rel_path = Entry::relative_path(&args.namespace);
+        xdg_dirs.find_data_file(rel_path)
+            .ok_or(format!("No entry file found for namespace {}", args.namespace))?
+    };
+
+    let mut child = process::Command::new(editor)
+        .arg(path)
+        .spawn()
+        .map_err(|_| "Unable to open editor" )?;
+    child.wait()
+        .map_err(|_| "Editor exited with error code" )?;
+
+    Ok(())
 }
 
 /// Check if the timespan of two entries overlap
