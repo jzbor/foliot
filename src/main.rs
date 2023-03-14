@@ -64,6 +64,9 @@ enum Command {
         tail: usize,
     },
 
+    /// Print current status of clock timer
+    Status,
+
     /// Create a per-month summary
     Summarize {
         /// Only show last n entries (0 to show all)
@@ -136,6 +139,7 @@ impl Command {
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Show { tail } => show(*tail, args),
+            Self::Status => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
         }
     }
@@ -428,6 +432,22 @@ fn show(tail: usize, args: &Args) -> Result<(), String> {
         .with(Margin::new(1, 1, 1, 1))
         .to_string();
     println!("{}", table);
+
+    Ok(())
+}
+
+fn status(args: &Args) -> Result<(), String> {
+    let path = ClockinTimestamp::relative_path(&args.namespace);
+    let clockin_timestamp: ClockinTimestamp = read_data_file(&path)?;
+
+    if !data_file_exists(&path).unwrap() {
+        println!("Clock is not running for namespace '{}'", args.namespace);
+    } else {
+        let duration: Duration = (now() - clockin_timestamp.start_time).into();
+        println!("Clock running for namespace '{}':", args.namespace);
+        println!("\t started {}", clockin_timestamp.start_time);
+        println!("\t running {}", duration);
+    }
 
     Ok(())
 }
