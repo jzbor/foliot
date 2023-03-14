@@ -233,6 +233,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foliot"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "serde",
+ "serde_yaml",
+ "tabled",
+ "xdg",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -426,18 +438,6 @@ dependencies = [
  "bytecount",
  "fnv",
  "unicode-width",
-]
-
-[[package]]
-name = "pendulum"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "serde",
- "serde_yaml",
- "tabled",
- "xdg",
 ]
 
 [[package]]
