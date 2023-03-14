@@ -71,6 +71,10 @@ enum Command {
         /// Only show last n entries (0 to show all)
         #[clap(short, long, default_value_t = 30)]
         tail: usize,
+
+        /// Wrap content column at x chars
+        #[clap(short, long, default_value_t = 80)]
+        wrap: usize,
     },
 
     /// Print current status of clock timer
@@ -148,7 +152,7 @@ impl Command {
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
-            Self::Show { tail } => show(*tail, args),
+            Self::Show { tail, wrap } => show(*tail, *wrap, args),
             Self::Status => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
         }
@@ -445,7 +449,7 @@ fn remove_data_file(path: &impl AsRef<Path>) -> Result<(), String> {
 }
 
 /// Print human readable table to the terminal
-fn show(tail: usize, args: &Args) -> Result<(), String> {
+fn show(tail: usize, wrap: usize, args: &Args) -> Result<(), String> {
     let path = Entry::relative_path(&args.namespace);
     let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
         read_data_file(&path)?
@@ -468,7 +472,8 @@ fn show(tail: usize, args: &Args) -> Result<(), String> {
 
     let table = Table::new(entry_slice)
         .with(Style::rounded())
-        .with(Rows::new(1..).not(Columns::first()).modify().with(Alignment::center()))
+        .with(Rows::new(1..).not(Columns::first()).not(Columns::last()).modify().with(Alignment::center()))
+        .with(Modify::new(Segment::all()).with(Width::wrap(wrap)))
         .with(Color::FG_GREEN)
         .with(Margin::new(1, 1, 1, 1))
         .to_string();
