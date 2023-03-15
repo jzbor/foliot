@@ -33,15 +33,15 @@ struct ClockinTimestamp {
     start_time: DateTime<Local>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, clap::Subcommand)]
+#[derive(Clone, Debug, PartialEq, clap::Subcommand)]
 enum Command {
     /// Abort current timer
     Abort {},
 
     /// Clock an arbitrary time
     Clock {
-        /// Number of minutes to log
-        minutes: i64,
+        /// Number of hours to log
+        hours: f64,
 
         /// Starting time (format: %Y-%m-%dT%H:%M:%S, eg. 2015-09-18T23:56:04)
         #[clap(short, long, value_parser = parse_starting_value)]
@@ -164,7 +164,7 @@ impl Command {
             Self::Abort {} => abort(args),
             Self::Clockin {} => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
-            Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
+            Self::Clock { hours, starting, comment } => clock_duration(*hours, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
             Self::Git { git_args } => git(git_args, args),
             Self::Path { namespace } => print_path(namespace.clone(), args),
@@ -318,9 +318,9 @@ fn clock(start: DateTime<Local>, end: DateTime<Local>, comment: Option<String>, 
     write_data_file(&path, entries)
 }
 
-fn clock_duration(minutes: i64, starting: Option<NaiveDateTime>, comment: Option<String>, args: &Args)
+fn clock_duration(hours: f64, starting: Option<NaiveDateTime>, comment: Option<String>, args: &Args)
         -> Result<(), String> {
-    let duration = chrono::Duration::minutes(minutes);
+    let duration = chrono::Duration::minutes((hours * 60.0) as i64);
 
     let (start, end) = if let Some(starting) = starting {
         let start = Local.from_local_datetime(&starting).unwrap();
