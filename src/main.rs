@@ -35,7 +35,7 @@ struct ClockinTimestamp {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, clap::Subcommand)]
 enum Command {
     /// Abort current timer
-    Abort,
+    Abort {},
 
     /// Clock an arbitrary time
     Clock {
@@ -51,7 +51,7 @@ enum Command {
     },
 
     /// Start the timer
-    Clockin,
+    Clockin {},
 
     /// Stop the timer and add save the entry
     Clockout {
@@ -78,7 +78,7 @@ enum Command {
     },
 
     /// Print current status of clock timer
-    Status,
+    Status {},
 
     /// Create a per-month summary
     Summarize {
@@ -147,13 +147,13 @@ impl Command {
     /// Execute a command with the given arguments
     fn execute(&self, args: &Args) -> Result<(), String> {
         match self {
-            Self::Abort => abort(args),
-            Self::Clockin => clockin(args),
+            Self::Abort {} => abort(args),
+            Self::Clockin {} => clockin(args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
             Self::Show { tail, wrap } => show(*tail, *wrap, args),
-            Self::Status => status(args),
+            Self::Status {} => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
         }
     }
