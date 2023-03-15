@@ -344,7 +344,7 @@ fn clockin(args: &Args) -> Result<(), String> {
         return Err(format!("Clock-in file '{}' already exists.\nPlease remove it before continuing.", path.to_string_lossy()));
     }
 
-    println!("Starting clock for namespace {} ({})", args.namespace, timestamp.start_time);
+    println!("Starting clock for namespace '{}' ({})", args.namespace, timestamp.start_time);
     write_data_file(&path, timestamp)
 }
 
@@ -377,11 +377,11 @@ fn edit(clockin: bool, args: &Args) -> Result<(), String> {
     let path = if clockin {
         let rel_path = ClockinTimestamp::relative_path(&args.namespace);
         xdg_dirs.find_data_file(rel_path)
-            .ok_or(format!("No clockin file found for namespace {}", args.namespace))?
+            .ok_or(format!("No clockin file found for namespace '{}'", args.namespace))?
     } else {
         let rel_path = Entry::relative_path(&args.namespace);
         xdg_dirs.find_data_file(rel_path)
-            .ok_or(format!("No entry file found for namespace {}", args.namespace))?
+            .ok_or(format!("No entry file found for namespace '{}'", args.namespace))?
     };
 
     let mut child = process::Command::new(editor)
