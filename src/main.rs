@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt::Display;
 use std::fs;
+use std::iter;
 use std::ops::Add;
 use std::path::*;
 use std::process;
@@ -64,6 +65,12 @@ enum Command {
         /// Edit clockin file
         #[clap(short, long)]
         clockin: bool,
+    },
+
+    /// Execute git command in foliot directory
+    Git {
+        /// Arguments to pass to git
+        git_args: Vec<String>,
     },
 
     /// Show entries in a table
@@ -152,6 +159,7 @@ impl Command {
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
+            Self::Git { git_args } => git(git_args, args),
             Self::Show { tail, wrap } => show(*tail, *wrap, args),
             Self::Status {} => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
@@ -384,6 +392,27 @@ fn entries_overlap(e1: &Entry, e2: &Entry) -> bool {
         || (e1.end_time > e2.start_time && e1.end_time < e2.end_time)
         || (e2.start_time > e1.start_time && e2.start_time < e1.end_time)
         || (e2.end_time > e1.start_time && e2.end_time < e1.end_time)
+}
+
+/// Run git command in foliot data directory
+fn git(git_args: &Vec<String>, _args: &Args) -> Result<(), String> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(XDG_DIR_PREFIX)
+        .map_err(|e| e.to_string())?;
+    let working_dir = xdg_dirs.find_data_file("").ok_or(format!("Path not found"))?;
+    let path = working_dir.to_str().ok_or(format!("Unable to convert path to string"))?;
+
+    let args: Vec<&str> = iter::once("-C").chain(iter::once(path))
+        .chain(git_args.iter().map(|s| s as &str))
+        .collect();
+
+    let mut child = process::Command::new("git")
+        .args(args)
+        .spawn()
+        .map_err(|_| "Unable to open git" )?;
+    child.wait()
+        .map_err(|_| "Git exited with error code" )?;
+
+    Ok(())
 }
 
 /// Check whether a file with the relative path `path` exists in the data directory
