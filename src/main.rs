@@ -73,6 +73,13 @@ enum Command {
         git_args: Vec<String>,
     },
 
+    /// Print path to the data to output
+    Path {
+        /// Print path to the given namespace entry file
+        #[clap(short, long)]
+        namespace: Option<String>,
+    },
+
     /// Show entries in a table
     Show {
         /// Only show last n entries (0 to show all)
@@ -160,6 +167,7 @@ impl Command {
             Self::Clock { minutes, starting, comment } => clock_duration(*minutes, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
             Self::Git { git_args } => git(git_args, args),
+            Self::Path { namespace } => print_path(namespace.clone(), args),
             Self::Show { tail, wrap } => show(*tail, *wrap, args),
             Self::Status {} => status(args),
             Self::Summarize { tail } => summarize(*tail, args),
@@ -453,6 +461,27 @@ fn parse_starting_value_time(s: &str) -> Result<NaiveDateTime, String> {
     };
 
     Ok(NaiveDateTime::new(date, time))
+}
+
+/// Print path to foliot data
+fn print_path(namespace: Option<String>, _args: &Args) -> Result<(), String> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(XDG_DIR_PREFIX)
+        .map_err(|e| e.to_string())?;
+
+    let path = if let Some(namespace) = namespace {
+        let rel_path = Entry::relative_path(&namespace);
+        let working_dir = xdg_dirs.find_data_file(rel_path).ok_or(format!("Path not found"))?;
+        working_dir.to_str().ok_or(format!("Unable to convert path to string"))?
+            .to_owned()
+    } else {
+        let working_dir = xdg_dirs.find_data_file("").ok_or(format!("Path not found"))?;
+        working_dir.to_str().ok_or(format!("Unable to convert path to string"))?
+            .to_owned()
+    };
+
+    println!("{}", path);
+
+    Ok(())
 }
 
 /// Deserialize a file with the relative path `path` in the data directory
