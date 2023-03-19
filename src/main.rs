@@ -40,7 +40,7 @@ enum Command {
 
     /// Clock an arbitrary time
     Clock {
-        /// Number of hours to log
+        /// Number of hours to log (floating point number)
         hours: f64,
 
         /// Starting time (format: %Y-%m-%dT%H:%M:%S, eg. 2015-09-18T23:56:04)
