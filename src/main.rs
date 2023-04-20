@@ -104,7 +104,7 @@ enum Command {
 
 /// Human readable duration (no more precise than a minute)
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct Duration {
+struct HumanDuration {
     hours: i64,
     minutes: i64,
 }
@@ -118,9 +118,6 @@ struct Entry {
     /// Time the clock ended
     end_time: DateTime<Local>,
 
-    /// Total time elapsed
-    duration: Duration,
-
     /// Optional comment
     comment: Option<String>,
 }
@@ -131,7 +128,7 @@ struct TableEntry {
     date: NaiveDate,
     from: NaiveTime,
     to: NaiveTime,
-    duration: Duration,
+    duration: HumanDuration,
     comment: String,
 }
 
@@ -141,7 +138,7 @@ struct SummaryTableItem {
     month: String,
 
     #[tabled(rename = "total hours")]
-    total_hours: Duration,
+    total_hours: HumanDuration,
 
     #[tabled(rename = "hours / week")]
     hours_per_week: String,
@@ -188,9 +185,9 @@ impl ClockinTimestamp {
     }
 }
 
-impl Duration {
-    fn zero() -> Duration {
-        Duration {
+impl HumanDuration {
+    fn zero() -> HumanDuration {
+        HumanDuration {
             hours: 0,
             minutes: 0,
         }
@@ -202,7 +199,6 @@ impl Entry {
     fn create(start_time: DateTime<Local>, end_time: DateTime<Local>, comment: Option<String>) -> Self {
         return Entry {
             start_time, end_time, comment,
-            duration: (end_time - start_time).into(),
         };
     }
 
@@ -211,29 +207,34 @@ impl Entry {
         PathBuf::from(format!("{}", namespace))
             .with_extension("yaml")
     }
+
+    /// Total duration of the entry
+    fn duration(&self) -> HumanDuration {
+        (self.end_time - self.start_time).into()
+    }
 }
 
-impl Display for Duration {
+impl Display for HumanDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:02}:{:02}h", self.hours, self.minutes)
     }
 }
 
-impl Add for Duration {
+impl Add for HumanDuration {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
         let added_minutes = self.minutes + other.minutes;
-        Duration {
+        HumanDuration {
             hours: self.hours + other.hours + added_minutes / 60,
             minutes: added_minutes % 60,
         }
     }
 }
 
-impl Into<Duration> for chrono::Duration {
-    fn into(self) -> Duration {
-        Duration {
+impl Into<HumanDuration> for chrono::Duration {
+    fn into(self) -> HumanDuration {
+        HumanDuration {
             hours: self.num_hours(),
             minutes: self.num_minutes() % 60
         }
@@ -246,7 +247,7 @@ impl Into<TableEntry> for &Entry {
             date: self.start_time.date_naive(),
             from: self.start_time.time(),
             to: self.end_time.time(),
-            duration: self.duration,
+            duration: self.duration(),
             comment: self.comment.clone().unwrap_or(String::new()),
         }
     }
@@ -259,7 +260,7 @@ impl Into<SummaryTableItem> for (String, Vec<Entry>) {
         dates.dedup();
 
         let total_hours = entries.iter()
-            .fold(Duration::zero(), |d, e| d + e.duration);
+            .fold(HumanDuration::zero(), |d, e| d + e.duration());
         let days = dates.len();
         let weeks: f32 = (days_in_month(entries.first().unwrap().start_time.date_naive()) as f32) / 7.0;
         let rem_minutes = if total_hours.minutes == 0 { 0.0 } else { 60.0 / total_hours.minutes as f32 };
@@ -309,7 +310,7 @@ fn clock(start: DateTime<Local>, end: DateTime<Local>, comment: Option<String>, 
     println!("Adding entry for namespace '{}':", args.namespace);
     println!("\t starting at {}", entry.start_time);
     println!("\t ending at   {}", entry.end_time);
-    println!("\t duration:   {}", entry.duration);
+    println!("\t duration:   {}", entry.duration());
     if let Some(comment) = &entry.comment {
         println!("\t comment:    {}", comment);
     }
@@ -547,7 +548,7 @@ fn status(args: &Args) -> Result<(), String> {
     if !data_file_exists(&path).unwrap() {
         println!("Clock is not running for namespace '{}'", args.namespace);
     } else {
-        let duration: Duration = (now() - clockin_timestamp.start_time).into();
+        let duration: HumanDuration = (now() - clockin_timestamp.start_time).into();
         println!("Clock running for namespace '{}':", args.namespace);
         println!("\t started {}", clockin_timestamp.start_time);
         println!("\t running {}", duration);
