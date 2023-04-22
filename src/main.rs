@@ -543,11 +543,11 @@ fn show(tail: usize, wrap: usize, args: &Args) -> Result<(), String> {
 
 fn status(args: &Args) -> Result<(), String> {
     let path = ClockinTimestamp::relative_path(&args.namespace);
-    let clockin_timestamp: ClockinTimestamp = read_data_file(&path)?;
 
     if !data_file_exists(&path).unwrap() {
         println!("Clock is not running for namespace '{}'", args.namespace);
     } else {
+        let clockin_timestamp: ClockinTimestamp = read_data_file(&path)?;
         let duration: HumanDuration = (now() - clockin_timestamp.start_time).into();
         println!("Clock running for namespace '{}':", args.namespace);
         println!("\t started {}", clockin_timestamp.start_time);
