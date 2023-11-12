@@ -23,6 +23,10 @@ struct Args {
     namespace: String,
     // TODO handle empty values
 
+    /// Run `git commit -am "[<namespace>] <action>"` afterwards
+    #[clap(short, long)]
+    git_commit: bool,
+
     #[clap(subcommand)]
     command: Command,
 }
@@ -226,6 +230,51 @@ impl Entry {
 impl Display for HumanDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:02}:{:02}h", self.hours, self.minutes)
+    }
+}
+
+impl Display for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Abort {} => write!(f, "abort"),
+            Self::Clockin { starting } => match starting {
+                Some(time) => write!(f, "clockin --starting \"{}\"", time),
+                None => write!(f, "clockin"),
+            },
+            Self::Clockout { comment } => match comment {
+                Some(comment) => write!(f, "clockout \"{}\"", comment),
+                None => write!(f, "clockout"),
+            },
+            Self::Clock { hours, starting, comment } => {
+                write!(f, "clock")?;
+                if let Some(time) = starting {
+                    write!(f, " --starting \"{}\"", time)?;
+                }
+                write!(f, " {}", hours)?;
+                if let Some(comment) = comment {
+                    write!(f, " \"{}\"", comment)?;
+                }
+                write!(f, "")
+            },
+            Self::Edit { clockin } => match clockin {
+                true => write!(f, "edit --clockin"),
+                false => write!(f, "edit"),
+            },
+            Self::Git { git_args } => {
+                write!(f, "git")?;
+                for arg in git_args {
+                    write!(f, "\"{}\"", arg)?;
+                }
+                write!(f, "")
+            },
+            Self::Path { namespace } => match namespace {
+                Some(ns) => write!(f, "path --namespace \"{}\"", ns),
+                None => write!(f, "path"),
+            },
+            Self::Show { tail, wrap } => write!(f, "show --tail {} --wrap {}", tail, wrap),
+            Self::Status {} => write!(f, "status"),
+            Self::Summarize { tail } => write!(f, "summarize --tail {}", tail),
+        }
     }
 }
 
@@ -642,5 +691,14 @@ fn main() {
     if let Err(e) = command.execute(&args) {
         println!("Error: {}", e);
         std::process::exit(1);
+    }
+
+    if args.git_commit {
+        let message = format!("[{}] {}", args.namespace, command);
+        println!("\n=> git commit -am \"{}\"", message);
+        if let Err(e) = git(&vec!["commit".to_owned(), "-am".to_owned(), message], &args) {
+            println!("Error: {}", e);
+            std::process::exit(1);
+        }
     }
 }
