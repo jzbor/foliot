@@ -52,7 +52,11 @@ enum Command {
     },
 
     /// Start the timer
-    Clockin {},
+    Clockin {
+        /// Starting time (format: %Y-%m-%dT%H:%M:%S, eg. 2015-09-18T23:56:04)
+        #[clap(short, long, value_parser = parse_starting_value)]
+        starting: Option<NaiveDateTime>,
+    },
 
     /// Stop the timer and add save the entry
     Clockout {
@@ -159,7 +163,7 @@ impl Command {
     fn execute(&self, args: &Args) -> Result<(), String> {
         match self {
             Self::Abort {} => abort(args),
-            Self::Clockin {} => clockin(args),
+            Self::Clockin { starting } => clockin(*starting, args),
             Self::Clockout { comment } => clockout(comment.clone(), args),
             Self::Clock { hours, starting, comment } => clock_duration(*hours, *starting, comment.clone(), args),
             Self::Edit { clockin } => edit(*clockin, args),
@@ -176,6 +180,11 @@ impl ClockinTimestamp {
     /// Creates a [ClockinTimestamp] referencing the date and time of the function call
     fn now() -> Self {
         return ClockinTimestamp { start_time: now() }
+    }
+
+    /// Creates a [ClockinTimestamp] referencing a certain starting time
+    fn starting(time: &NaiveDateTime) -> Self {
+        return ClockinTimestamp { start_time: Local.from_local_datetime(time).unwrap() }
     }
 
     /// Relative path to the file that contains the last clockin timestamp
@@ -337,9 +346,13 @@ fn clock_duration(hours: f64, starting: Option<NaiveDateTime>, comment: Option<S
 }
 
 /// Start a new clock by creating a new clockin file
-fn clockin(args: &Args) -> Result<(), String> {
+fn clockin(starting: Option<NaiveDateTime>, args: &Args) -> Result<(), String> {
     let path = ClockinTimestamp::relative_path(&args.namespace);
-    let timestamp = ClockinTimestamp::now();
+    let timestamp = if let Some(time) = starting {
+        ClockinTimestamp::starting(&time)
+    } else {
+        ClockinTimestamp::now()
+    };
 
     if data_file_exists(&path).unwrap() {
         return Err(format!("Clock-in file '{}' already exists.\nPlease remove it before continuing.", path.to_string_lossy()));
