@@ -28,6 +28,10 @@ struct Args {
     #[clap(short, long)]
     git_commit: bool,
 
+    /// Pull, rebase and push git repository afterwards
+    #[clap(short('p'), long)]
+    git_push: bool,
+
     #[clap(subcommand)]
     command: Command,
 }
@@ -737,6 +741,20 @@ fn main() {
         if let Err(e) = git(&vec!["commit".to_owned(), "-am".to_owned(), message], &args) {
             println!("Error: {}", e);
             std::process::exit(1);
+        }
+
+        if args.git_push {
+            println!("\n=> git pull --rebase");
+            if let Err(e) = git(&vec!["pull".to_owned(), "--rebase".to_owned()], &args) {
+                println!("Error: {}", e);
+                std::process::exit(1);
+            }
+
+            println!("\n=> git push");
+            if let Err(e) = git(&vec!["push".to_owned()], &args) {
+                println!("Error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
