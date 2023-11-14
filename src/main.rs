@@ -1,6 +1,7 @@
 use chrono::offset::Local;
 use chrono::{DateTime, DurationRound, NaiveDateTime, TimeZone, NaiveDate, NaiveTime, Months};
 use clap::Parser;
+use regex::Regex;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::env;
@@ -90,6 +91,10 @@ enum Command {
 
     /// Show entries in a table
     Show {
+        /// Filter entries with regex
+        #[clap(short, long)]
+        filter: Option<String>,
+
         /// Only show last n entries (0 to show all)
         #[clap(short, long, default_value_t = 30)]
         tail: usize,
@@ -104,6 +109,10 @@ enum Command {
 
     /// Create a per-month summary
     Summarize {
+        /// Filter entries with regex
+        #[clap(short, long)]
+        filter: Option<String>,
+
         /// Only show last n entries (0 to show all)
         #[clap(short, long, default_value_t = 30)]
         tail: usize,
@@ -173,9 +182,9 @@ impl Command {
             Self::Edit { clockin } => edit(*clockin, args),
             Self::Git { git_args } => git(git_args, args),
             Self::Path { namespace } => print_path(namespace.clone(), args),
-            Self::Show { tail, wrap } => show(*tail, *wrap, args),
+            Self::Show { filter, tail, wrap } => show(filter, *tail, *wrap, args),
             Self::Status {} => status(args),
-            Self::Summarize { tail } => summarize(*tail, args),
+            Self::Summarize { filter, tail } => summarize(filter, *tail, args),
         }
     }
 }
@@ -271,9 +280,21 @@ impl Display for Command {
                 Some(ns) => write!(f, "path --namespace \"{}\"", ns),
                 None => write!(f, "path"),
             },
-            Self::Show { tail, wrap } => write!(f, "show --tail {} --wrap {}", tail, wrap),
+            Self::Show { filter, tail, wrap } => {
+                write!(f, "show")?;
+                if let Some(filter_str) = filter {
+                    write!(f, " --filter \"{}\"", filter_str)?;
+                }
+                write!(f, " --tail {} --wrap {}", tail, wrap)
+            },
             Self::Status {} => write!(f, "status"),
-            Self::Summarize { tail } => write!(f, "summarize --tail {}", tail),
+            Self::Summarize { filter, tail } => {
+                write!(f, "summarize")?;
+                if let Some(filter_str) = filter {
+                    write!(f, " --filter \"{}\"", filter_str)?;
+                }
+                write!(f, " --tail {}", tail)
+            },
         }
     }
 }
@@ -570,7 +591,7 @@ fn remove_data_file(path: &impl AsRef<Path>) -> Result<(), String> {
 }
 
 /// Print human readable table to the terminal
-fn show(tail: usize, wrap: usize, args: &Args) -> Result<(), String> {
+fn show(filter: &Option<String>, tail: usize, wrap: usize, args: &Args) -> Result<(), String> {
     let path = Entry::relative_path(&args.namespace);
     let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
         read_data_file(&path)?
@@ -579,7 +600,13 @@ fn show(tail: usize, wrap: usize, args: &Args) -> Result<(), String> {
     };
     entries.sort();
 
+    let regex_opt = match filter {
+        Some(filter_str) => Some(Regex::new(filter_str).map_err(|e| e.to_string())?),
+        None => None,
+    };
+
     let table_entries: Vec<TableEntry> = entries.iter()
+        .filter(|&e| regex_opt.as_ref().map_or(true, |re| e.comment.as_ref().map_or(true, |c| re.is_match(&c))))
         .map(|e| e.into())
         .collect();
 
@@ -619,7 +646,7 @@ fn status(args: &Args) -> Result<(), String> {
     Ok(())
 }
 
-fn summarize(tail: usize, args: &Args) -> Result<(), String> {
+fn summarize(filter: &Option<String>, tail: usize, args: &Args) -> Result<(), String> {
     let path = Entry::relative_path(&args.namespace);
     let mut entries: Vec<Entry> = if data_file_exists(&path).unwrap() {
         read_data_file(&path)?
@@ -627,6 +654,17 @@ fn summarize(tail: usize, args: &Args) -> Result<(), String> {
         return Err(format!("No file found for namespace '{}'", args.namespace));
     };
     entries.sort();
+
+    let regex_opt = match filter {
+        Some(filter_str) => Some(Regex::new(filter_str).map_err(|e| e.to_string())?),
+        None => None,
+    };
+
+    if let Some(re) = regex_opt {
+        entries = entries.into_iter()
+            .filter(|e| e.comment.as_ref().map_or(true, |c| re.is_match(&c)))
+            .collect();
+    }
 
     let mut entries_by_month: HashMap<String, Vec<Entry>> = HashMap::new();
 
