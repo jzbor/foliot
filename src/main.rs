@@ -689,22 +689,32 @@ fn summarize(filter: &Option<String>, tail: usize, args: &Args) -> Result<(), St
         .collect();
     table_items.sort();
 
-    let items_slice = if tail == 0 {
-        table_items.as_slice()
+    let mut tailed_items = if tail == 0 {
+        table_items
     } else {
         let len = table_items.len();
         let idx = if len > tail { len - tail } else { 0 };
-        &table_items.as_slice()[idx..]
+        table_items[idx..].to_vec()
     };
 
-    let table = Table::new(items_slice)
+    let total = SummaryTableItem {
+        month: "Total".to_owned(),
+        total_hours: tailed_items.iter().map(|i| i.total_hours)
+            .fold(HumanDuration { hours: 0, minutes: 0 }, |a, b| a + b),
+        hours_per_week: "-".to_owned(),
+        days: tailed_items.iter().map(|i| i.days).sum(),
+        nitems: tailed_items.iter().map(|i| i.nitems).sum(),
+    };
+
+    tailed_items.push(total);
+
+    let table = Table::new(tailed_items)
         .with(Style::rounded())
         .with(Rows::new(1..).not(Columns::first()).modify().with(Alignment::center()))
         .with(Color::FG_GREEN)
         .with(Margin::new(1, 1, 1, 1))
         .to_string();
     println!("{}", table);
-
 
     Ok(())
 }
