@@ -1,0 +1,61 @@
+{
+  "nodes": {
+    "cf": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1717341061,
+        "narHash": "sha256-BI3oxYX5ahrxJdmqJoy9GXz8If4FmD+DlQNsKH6CVsA=",
+        "owner": "jzbor",
+        "repo": "cornflakes",
+        "rev": "71742f72bb4644ec7958dba3ebd7be664c66c264",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jzbor",
+        "repo": "cornflakes",
+        "type": "github"
+      }
+    },
+    "crane": {
+      "locked": {
+        "lastModified": 1725125250,
+        "narHash": "sha256-CB20rDD5eHikF6mMTTJdwPP1qvyoiyyw1RDUzwIaIF8=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "96fd12c7100e9e05fa1a0a5bd108525600ce282f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1724819573,
+        "narHash": "sha256-GnR7/ibgIH1vhoy8cYdmXE6iyZqKqFxQSVkFgosBh6w=",
+        "path": "/nix/store/887hpp8a2i99n9jjwcvz6qkhhhqsvzkg-source",
+        "rev": "71e91c409d1e654808b2621f28a327acfdad8dc2",
+        "type": "path"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "type": "indirect"
+      }
+    },
+    "root": {
+      "inputs": {
+        "cf": "cf",
+        "crane": "crane",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
